@@ -79,6 +79,13 @@ if (window.matchMedia) {
 // 初始化主题
 applyTheme(currentTheme);
 
+// ─── 设置面板折叠 ─────────────────────────────────────────────────
+function toggleSettings() {
+  const panel = document.getElementById('settingsPanel');
+  if (!panel) return;
+  panel.classList.toggle('collapsed');
+}
+
 // State
 let files = [];
 let results = [];
