@@ -16,11 +16,6 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: Install CLI tools
         run: |
           brew install pngquant oxipng mozjpeg gifsicle webp jpeg-xl libavif
@@ -31,7 +26,6 @@ jobs:
       - name: Build
         run: cargo tauri build
         env:
-          # 允许无签名构建
           CODE_SIGN_IDENTITY: ""
 
       - name: Bundle CLI tools
@@ -42,18 +36,13 @@ jobs:
           hdiutil create -volname "OctoShrink" \
             -srcfolder "src-tauri/target/release/bundle/macos/OctoShrink.app" \
             -ov -format UDZO \
-            "src-tauri/target/release/bundle/OctoShrink_${{ github.ref_name }}_aarch64.dmg" || \
-          hdiutil create -volname "OctoShrink" \
-            -srcfolder "src-tauri/target/release/bundle/macos/OctoShrink.app" \
-            -ov -format UDZO \
-            "src-tauri/target/release/bundle/OctoShrink_universal.dmg"
+            "src-tauri/target/release/bundle/OctoShrink_${{ github.ref_name }}_macos.dmg"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: macos-build
           path: |
-            src-tauri/target/release/bundle/macos/OctoShrink.app
             src-tauri/target/release/bundle/*.dmg
 
   # ═══ Windows 构建 ═══
@@ -65,40 +54,68 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install CLI tools
+      - name: Download CLI tools
         shell: pwsh
         run: |
-          # 使用 scoop 安装 CLI 工具
-          iex "& {$(irm get.scoop.sh)} -RunAsAdmin"
-          scoop install pngquant oxipng gifsicle webp
+          # Clear macOS binaries, download Windows tools
+          Remove-Item src-tauri\resources\bin\* -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path src-tauri\resources\bin
 
-          # mozjpeg (cjpeg)
-          scoop bucket add extras
-          scoop install jpegview
+          $tools = @(
+            @{ Name = "pngquant.exe"; Url = "https://github.com/ImageOptim/pngquant/releases/download/v3.0.3/pngquant-3.0.3-windows.zip" },
+            @{ Name = "oxipng.exe"; Url = "https://github.com/shssoichiro/oxipng/releases/download/v9.1.5/oxipng-9.1.5-x86_64-pc-windows-msvc.zip" },
+            @{ Name = "gifsicle.exe"; Url = "https://eternallybored.org/misc/gifsicle/releases/current/windows-x64/giflossy-x64.zip" },
+            @{ Name = "cwebp.exe"; Url = "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.3.2-windows-x64.zip" },
+            @{ Name = "avifenc.exe"; Url = "https://github.com/AOM-AV1/libavif/releases/download/v1.0.4/libavif-win64-v1.0.4.zip" },
+            @{ Name = "cjxl.exe"; Url = "https://github.com/libjxl/libjxl/releases/download/v0.10.2/jxl-x64-windows-0.10.2.zip" }
+          )
 
-          # libavif (avifenc) - 从 GitHub 下载
-          $avifUrl = "https://github.com/AOM-AV1/libavif/releases/download/v1.0.4/libavif-win64-v1.0.4.zip"
-          Invoke-WebRequest -Uri $avifUrl -OutFile avif.zip
-          Expand-Archive avif.zip -DestinationPath C:\tools\avif
-          $env:PATH = "C:\tools\avif\bin;" + $env:PATH
-          echo "C:\tools\avif\bin" >> $env:GITHUB_PATH
+          foreach ($tool in $tools) {
+            try {
+              $zipPath = "$($tool.Name).zip"
+              Invoke-WebRequest -Uri $tool.Url -OutFile $zipPath -ErrorAction Stop
+              $extractPath = "extract-$($tool.Name)"
+              Expand-Archive $zipPath -DestinationPath $extractPath -Force
+              $found = Get-ChildItem -Path $extractPath -Filter $tool.Name -Recurse | Select-Object -First 1
+              if ($found) {
+                Copy-Item $found.FullName "src-tauri\resources\bin\$($tool.Name)" -Force
+                Write-Host "  OK $($tool.Name)"
+              } else {
+                Write-Host "  SKIP $($tool.Name) - not found in archive"
+              }
+              Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
+              Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+            } catch {
+              Write-Host "  FAIL $($tool.Name) - $($_.Exception.Message)"
+            }
+          }
 
-          # jpeg-xl (cjxl) - 从 GitHub 下载
-          $jxlUrl = "https://github.com/libjxl/libjxl/releases/download/v0.10.2/jxl-x64-windows-0.10.2.zip"
-          Invoke-WebRequest -Uri $jxlUrl -OutFile jxl.zip
-          Expand-Archive jxl.zip -DestinationPath C:\tools\jxl
-          echo "C:\tools\jxl\bin" >> $env:GITHUB_PATH
+          # cjpeg (mozjpeg) - no official Windows binary, try scoop
+          try {
+            iex "& {$(irm get.scoop.sh)} -RunAsAdmin" 2>$null
+            scoop install png2mozjpeg 2>$null
+            $cjpeg = Get-Command cjpeg.exe -ErrorAction SilentlyContinue
+            if ($cjpeg) {
+              Copy-Item $cjpeg.Source "src-tauri\resources\bin\cjpeg.exe" -Force
+              Write-Host "  OK cjpeg.exe"
+            }
+          } catch {
+            Write-Host "  SKIP cjpeg.exe"
+          }
 
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2.0" --locked
+          Write-Host "`nBundled tools:"
+          Get-ChildItem src-tauri\resources\bin\ | ForEach-Object { Write-Host "  $($_.Name)" }
 
-      - name: Build
-        run: cargo tauri build
+      - name: Add resources config and build
+        shell: pwsh
+        run: |
+          # Add resources config for Tauri to bundle tools
+          $config = Get-Content src-tauri\tauri.conf.json -Raw | ConvertFrom-Json
+          $config.bundle | Add-Member -NotePropertyName "resources" -NoteValue @("resources/bin/*") -Force
+          $config | ConvertTo-Json -Depth 10 | Set-Content src-tauri\tauri.conf.json
+
+          cargo install tauri-cli --version "^2.0" --locked
+          cargo tauri build
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -117,11 +134,6 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -134,27 +146,47 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev
 
-      - name: Install CLI tools
+      - name: Download CLI tools
         run: |
-          sudo apt-get install -y pngquant gifsicle webp libavif-bin
-          # oxipng
-          wget -q https://github.com/shssoichiro/oxipng/releases/download/v10.1.1/oxipng-10.1.1-x86_64-unknown-linux-musl.tar.gz
-          tar xzf oxipng-*.tar.gz
-          sudo mv oxipng-*/oxipng /usr/local/bin/
-          # mozjpeg (cjpeg)
-          wget -q https://github.com/mozilla/mozjpeg/releases/download/v4.1.5/mozjpeg-4.1.5-x86_64.tar.gz
-          tar xzf mozjpeg-*.tar.gz
-          sudo mv mozjpeg-*/cjpeg /usr/local/bin/
-          # jpeg-xl (cjxl)
-          wget -q https://github.com/libjxl/libjxl/releases/download/v0.10.2/jxl-linux-x64-static-v0.10.2.tar.gz
-          tar xzf jxl-linux-*.tar.gz
-          sudo mv jxl-*/cjxl /usr/local/bin/ || sudo find . -name cjxl -exec mv {} /usr/local/bin/ \;
+          # Clear macOS binaries
+          rm -f src-tauri/resources/bin/*
+          rm -rf src-tauri/resources/lib/
 
-      - name: Install Tauri CLI
-        run: cargo install tauri-cli --version "^2.0" --locked
+          # Install via apt and copy to resources/bin
+          sudo apt-get install -y pngquant gifsicle webp libavif-bin libjpeg-turbo-progs 2>/dev/null || true
+          for tool in pngquant gifsicle cwebp avifenc cjpeg; do
+            cp "$(which $tool 2>/dev/null)" src-tauri/resources/bin/ 2>/dev/null && echo "  OK $tool" || echo "  SKIP $tool"
+          done
 
-      - name: Build
-        run: cargo tauri build
+          # oxipng - static musl binary
+          wget -q "https://github.com/shssoichiro/oxipng/releases/download/v9.1.5/oxipng-9.1.5-x86_64-unknown-linux-musl.tar.gz" -O /tmp/oxipng.tar.gz 2>/dev/null && \
+            tar xzf /tmp/oxipng.tar.gz -C /tmp && \
+            cp /tmp/oxipng-*/oxipng src-tauri/resources/bin/ && echo "  OK oxipng" || echo "  SKIP oxipng"
+
+          # cjxl - try libjxl release
+          wget -q "https://github.com/libjxl/libjxl/releases/download/v0.10.2/jxl-linux-x64-static-v0.10.2.tar.gz" -O /tmp/jxl.tar.gz 2>/dev/null && \
+            tar xzf /tmp/jxl.tar.gz -C /tmp 2>/dev/null && \
+            find /tmp -name cjxl -type f -executable -exec cp {} src-tauri/resources/bin/ \; 2>/dev/null && echo "  OK cjxl" || echo "  SKIP cjxl"
+
+          echo ""
+          echo "Bundled tools:"
+          ls -la src-tauri/resources/bin/
+
+      - name: Add resources config and build
+        run: |
+          # Add resources config for Tauri to bundle tools
+          python3 -c "
+          import json
+          with open('src-tauri/tauri.conf.json', 'r') as f:
+              d = json.load(f)
+          d['bundle']['resources'] = ['resources/bin/*']
+          with open('src-tauri/tauri.conf.json', 'w') as f:
+              json.dump(d, f, indent=2, ensure_ascii=False)
+              f.write('\n')
+          "
+
+          cargo install tauri-cli --version "^2.0" --locked
+          cargo tauri build
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -181,21 +213,18 @@ jobs:
       - name: Prepare release files
         run: |
           mkdir -p release
-          # macOS
-          find artifacts/macos-build -name "*.dmg" -exec cp {} release/ \;
-          # Windows
-          find artifacts/windows-build -name "*.exe" -exec cp {} release/ \;
-          find artifacts/windows-build -name "*.msi" -exec cp {} release/ \;
-          # Linux
-          find artifacts/linux-build -name "*.deb" -exec cp {} release/ \;
-          find artifacts/linux-build -name "*.AppImage" -exec cp {} release/ \;
+          find artifacts -name "*.dmg" -exec cp {} release/ \;
+          find artifacts -name "*.exe" -exec cp {} release/ \;
+          find artifacts -name "*.msi" -exec cp {} release/ \;
+          find artifacts -name "*.deb" -exec cp {} release/ \;
+          find artifacts -name "*.AppImage" -exec cp {} release/ \;
           ls -la release/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name || 'v2.0.0' }}
-          name: 章小压 · OctoShrink ${{ github.ref_name || 'v2.0.0' }}
+          tag_name: ${{ github.ref_name }}
+          name: 章小压 · OctoShrink ${{ github.ref_name }}
           body: |
             ## 章小压 · OctoShrink
 
@@ -205,17 +234,17 @@ jobs:
 
             | 平台 | 文件 | 说明 |
             |------|------|------|
-            | macOS (Apple Silicon) | `.dmg` | 内置全部压缩工具，开箱即用 |
-            | Windows | `.exe` / `.msi` | 需系统安装 CLI 工具 |
-            | Linux | `.deb` / `.AppImage` | 需系统安装 CLI 工具 |
+            | macOS | `.dmg` | 内置全部压缩工具，开箱即用 |
+            | Windows | `.exe` / `.msi` | 内置压缩工具，开箱即用 |
+            | Linux | `.deb` / `.AppImage` | 内置压缩工具，开箱即用 |
 
             ### 功能
-            - 🎯 支持 PNG/JPG/GIF/WebP/AVIF/JPEG XL 压缩
-            - 🚀 3 线程并发批量处理
-            - 🌙 暗黑模式（自动/亮色/暗黑）
-            - 📊 压缩前后实时对比
-            - ↩️ 一键恢复全部原图
-            - 🔧 macOS 版内置 7 个压缩工具，无需安装依赖
+            - 支持 PNG/JPG/GIF/WebP/AVIF/JPEG XL 压缩
+            - 3 线程并发批量处理
+            - 暗黑模式（自动/亮色/暗黑）
+            - 压缩前后实时对比
+            - 一键恢复全部原图
+            - 压缩失败显示错误详情
           files: release/*
           draft: false
           prerelease: false

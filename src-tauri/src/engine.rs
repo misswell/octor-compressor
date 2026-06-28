@@ -17,14 +17,16 @@ pub fn set_resource_dir(path: PathBuf) {
 
 /// 获取库目录路径（resources/lib）
 fn get_lib_dir() -> Option<PathBuf> {
-    // 1. 生产环境：从资源目录查找
     if let Some(res_dir) = RESOURCE_DIR.get() {
+        let lib_dir = res_dir.join("resources").join("lib");
+        if lib_dir.exists() {
+            return Some(lib_dir);
+        }
         let lib_dir = res_dir.join("lib");
         if lib_dir.exists() {
             return Some(lib_dir);
         }
     }
-    // 2. 开发模式：从 src-tauri/resources/lib 查找
     let dev_lib = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources").join("lib");
     if dev_lib.exists() {
         return Some(dev_lib);
@@ -35,7 +37,8 @@ fn get_lib_dir() -> Option<PathBuf> {
 /// 创建带有正确环境变量的 Command（自动设置 DYLD_FALLBACK_LIBRARY_PATH）
 fn make_command(tool: &Path) -> Command {
     let mut cmd = Command::new(tool);
-    if let Some(lib_dir) = get_lib_dir() {
+    if cfg!(target_os = "macos") {
+        if let Some(lib_dir) = get_lib_dir() {
         // macOS: 设置 DYLD_FALLBACK_LIBRARY_PATH 让工具找到内置动态库
         // 这样无需修改二进制文件的依赖路径，保持原始签名有效
         let current = std::env::var("DYLD_FALLBACK_LIBRARY_PATH").unwrap_or_default();
@@ -45,6 +48,7 @@ fn make_command(tool: &Path) -> Command {
             format!("{}:{}", lib_dir.to_string_lossy(), current)
         };
         cmd.env("DYLD_FALLBACK_LIBRARY_PATH", combined);
+        }
     }
     cmd
 }
@@ -167,37 +171,69 @@ fn analyze_quality(path: &Path) -> u32 {
 
 /// Locate a CLI tool: first from bundled resources, then system PATH.
 fn find_tool(name: &str) -> Option<PathBuf> {
-    // 1. 优先从应用内置资源目录查找（开箱即用）
+    let exe_name = if cfg!(target_os = "windows") {
+        format!("{}.exe", name)
+    } else {
+        name.to_string()
+    };
+
+    // 1. Tauri bundled: <res>/resources/bin/<tool>
     if let Some(res_dir) = RESOURCE_DIR.get() {
-        let bundled = res_dir.join("bin").join(name);
+        let bundled = res_dir.join("resources").join("bin").join(&exe_name);
+        if bundled.exists() {
+            return Some(bundled);
+        }
+        // package.sh style: <res>/bin/<tool>
+        let bundled = res_dir.join("bin").join(&exe_name);
         if bundled.exists() {
             return Some(bundled);
         }
     }
-    // 2. 开发模式：从 src-tauri/resources/bin 查找
-    let dev_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources").join("bin").join(name);
+    // 2. Dev mode: src-tauri/resources/bin/<tool>
+    let dev_path = Path::new(env!("CARGO_MANIFEST_DIR")).join("resources").join("bin").join(&exe_name);
     if dev_path.exists() {
         return Some(dev_path);
     }
-    // 3. 回退到系统 PATH（用户自行安装的工具）
-    let extra = [
-        "/opt/homebrew/opt/mozjpeg/bin",
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-        "/usr/bin",
-        "/opt/local/bin",
-    ];
-    for dir in extra {
-        let p = Path::new(dir).join(name);
-        if p.exists() {
-            return Some(p);
+    // 3. System PATH
+    if cfg!(target_os = "windows") {
+        if let Ok(path_var) = std::env::var("PATH") {
+            for dir in path_var.split(';') {
+                let p = Path::new(dir).join(&exe_name);
+                if p.exists() {
+                    return Some(p);
+                }
+            }
         }
-    }
-    if let Ok(out) = std::process::Command::new("which").arg(name).output() {
-        if out.status.success() {
-            let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !s.is_empty() {
-                return Some(PathBuf::from(s));
+        if let Ok(out) = std::process::Command::new("where").arg(&exe_name).output() {
+            if out.status.success() {
+                if let Some(line) = String::from_utf8_lossy(&out.stdout).lines().next() {
+                    let s = line.trim();
+                    if !s.is_empty() {
+                        return Some(PathBuf::from(s));
+                    }
+                }
+            }
+        }
+    } else {
+        let extra = [
+            "/opt/homebrew/opt/mozjpeg/bin",
+            "/opt/homebrew/bin",
+            "/usr/local/bin",
+            "/usr/bin",
+            "/opt/local/bin",
+        ];
+        for dir in extra {
+            let p = Path::new(dir).join(name);
+            if p.exists() {
+                return Some(p);
+            }
+        }
+        if let Ok(out) = std::process::Command::new("which").arg(name).output() {
+            if out.status.success() {
+                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                if !s.is_empty() {
+                    return Some(PathBuf::from(s));
+                }
             }
         }
     }
