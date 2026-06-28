@@ -437,7 +437,7 @@ pub fn open_in_finder(file_path: String) -> bool {
     #[cfg(target_os = "windows")]
     {
         let _ = std::process::Command::new("explorer")
-            .args(["/select,", &file_path])
+            .arg(format!("/select,{}", file_path))
             .spawn();
     }
     #[cfg(target_os = "linux")]

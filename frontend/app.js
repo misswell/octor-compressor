@@ -491,10 +491,6 @@ function showResults() {
     const savingsText = r.savings >= 0 ? '-' + r.savings.toFixed(1) + '%' : '+' + Math.abs(r.savings).toFixed(1) + '%';
     const outExt = r.type || ext;
 
-    const escapedFile = r.file.replace(/'/g, "\\'");
-    const escapedBackup = (r.backupPath || '').replace(/'/g, "\\'");
-    const escapedMode = (r.outputMode || 'suffix').replace(/'/g, "\\'");
-
     item.innerHTML = `
       <div class="result-icon ${outExt}">${outExt}</div>
       <div class="result-info">
@@ -506,20 +502,35 @@ function showResults() {
       </div>
       <div class="result-savings ${savingsClass}">${savingsText}</div>
       <div class="result-actions">
-        <button class="btn-icon" onclick="saveResult('${escapedFile}')" title="另存为">
+        <button class="btn-icon" data-action="save" title="另存为">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M11 0H3a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V1a1 1 0 00-1-1zm-1 12H4V2h6v10z"/></svg>
         </button>
-        <button class="btn-icon" onclick="openCompareByFile('${escapedFile}')" title="对比查看">
+        <button class="btn-icon" data-action="compare" title="对比查看">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M2 2h4v4H2V2zm0 6h4v4H2V8zm6-6h4v4H8V2zm0 6h4v4H8V8z"/></svg>
         </button>
-        <button class="btn-icon" onclick="restoreOriginal('${escapedFile}', '${escapedBackup}', '${escapedMode}')" title="恢复原图">
+        <button class="btn-icon" data-action="restore" title="恢复原图">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M7 1a6 6 0 100 12A6 6 0 007 1zm0 10V7H4l3-4 3 4H7v4z"/></svg>
         </button>
-        <button class="btn-icon" onclick="openInFinder('${escapedFile}')" title="在访达中显示">
+        <button class="btn-icon" data-action="finder" title="在访达中显示">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 012.5 1h3.172a1.5 1.5 0 011.06.44l.94.94H11.5A1.5 1.5 0 0113 3.88V11.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 011 11.5V2.5z"/></svg>
         </button>
       </div>
     `;
+
+    // Attach event listeners (avoids path escaping issues on Windows backslashes)
+    (function(resultData) {
+      var btns = item.querySelectorAll('.btn-icon[data-action]');
+      btns.forEach(function(btn) {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          var action = btn.getAttribute('data-action');
+          if (action === 'save') saveResult(resultData.file);
+          else if (action === 'compare') openCompareByFile(resultData.file);
+          else if (action === 'restore') restoreOriginal(resultData.file, resultData.backupPath || '', resultData.outputMode || 'suffix');
+          else if (action === 'finder') openInFinder(resultData.file);
+        });
+      });
+    })(r);
 
     resultsList.appendChild(item);
 
