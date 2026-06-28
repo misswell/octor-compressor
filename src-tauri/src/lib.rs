@@ -45,5 +45,5 @@ pub fn run() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running Octor Compressor");
+        .expect("error while running OctoShrink");
 }

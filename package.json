@@ -1,7 +1,7 @@
 {
-  "name": "octor-compressor-tauri",
+  "name": "octoshrink",
   "version": "2.0.0",
-  "description": "Octor Compressor - Tauri edition",
+  "description": "OctoShrink - Tauri edition",
   "scripts": {
     "dev": "cargo tauri dev",
     "build": "cargo tauri build"

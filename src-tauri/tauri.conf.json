@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Octor Compressor",
+  "productName": "OctoShrink",
   "version": "2.0.0",
-  "identifier": "com.octor.compressor",
+  "identifier": "com.octoshrink",
   "build": {
     "frontendDist": "../frontend"
   },
@@ -10,7 +10,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "Octor Compressor",
+        "title": "OctoShrink",
         "width": 760,
         "height": 680,
         "minWidth": 640,

@@ -1,9 +1,9 @@
-# 🐙 Octor Compressor
+# 🐙 OctoShrink
 
 > **免费开源的图片压缩神器** — 图片压缩神器，帮你的图片减减肥
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-macOS-blue)](https://github.com/misswell/octor-compressor/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS-blue)](https://github.com/misswell/octoshrink/releases)
 [![Tauri](https://img.shields.io/badge/Tauri-2.x-orange)](https://tauri.app)
 
 ## ✨ 特性
@@ -70,7 +70,7 @@ bash scripts/package.sh
 ### 项目结构
 
 ```
-octor-compressor/
+octoshrink/
 ├── frontend/           # 前端（纯 HTML/CSS/JS，无构建步骤）
 │   ├── index.html
 │   ├── style.css

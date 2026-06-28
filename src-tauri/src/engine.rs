@@ -1,4 +1,4 @@
-// Octor Compressor - Rust compression engine
+// OctoShrink - Rust compression engine
 // Replaces the Node.js engine (sharp/squoosh) with CLI tools + the `image` crate.
 
 use std::fs;

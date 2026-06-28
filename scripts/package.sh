@@ -1,5 +1,5 @@
 #!/bin/bash
-# Octor Compressor 打包脚本
+# OctoShrink 打包脚本
 # 在 cargo tauri build 之后执行，将 CLI 工具和动态库复制到 .app bundle
 # 工具保持原始状态（不修改路径、不重新签名），通过 DYLD_FALLBACK_LIBRARY_PATH 加载库
 
@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-APP_BUNDLE="$PROJECT_DIR/src-tauri/target/release/bundle/macos/Octor Compressor.app"
+APP_BUNDLE="$PROJECT_DIR/src-tauri/target/release/bundle/macos/OctoShrink.app"
 
 if [ ! -d "$APP_BUNDLE" ]; then
   echo "❌ .app bundle 不存在，请先运行 cargo tauri build"

@@ -1,4 +1,4 @@
-// Octor Compressor - Tauri frontend
+// OctoShrink - Tauri frontend
 // Uses window.__TAURI__ global API (withGlobalTauri: true)
 
 const { invoke } = window.__TAURI__.core;
@@ -23,11 +23,11 @@ function dirname(p) {
 // ─── 主题管理（自动/亮色/暗黑）──────────────────────────────────
 // 三种模式：auto（跟随系统）、light、dark，循环切换
 const THEMES = ['auto', 'light', 'dark'];
-let currentTheme = localStorage.getItem('octor-theme') || 'auto';
+let currentTheme = localStorage.getItem('octoshrink-theme') || 'auto';
 
 function applyTheme(theme) {
   currentTheme = theme;
-  localStorage.setItem('octor-theme', theme);
+  localStorage.setItem('octoshrink-theme', theme);
 
   if (theme === 'dark') {
     document.documentElement.setAttribute('data-theme', 'dark');
@@ -905,7 +905,7 @@ async function restoreFromCompare() {
 }
 
 function toggleWindowControls() {
-  showToast('Octor Compressor v' + (window.appVersion || '2.0.0'));
+  showToast('OctoShrink v' + (window.appVersion || '2.0.0'));
 }
 
 function openCompareByFile(filePath) {

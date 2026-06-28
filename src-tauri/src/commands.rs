@@ -1,4 +1,4 @@
-// Octor Compressor - Tauri command handlers (replaces Electron IPC)
+// OctoShrink - Tauri command handlers (replaces Electron IPC)
 
 use std::collections::HashSet;
 use std::fs;
@@ -115,7 +115,7 @@ fn write_output_file(
     let out_ext = format!(".{}", result.out_type);
     let out_path: Option<PathBuf> = match options.output_mode.as_str() {
         "replace" => {
-            let backup_dir = std::env::temp_dir().join("octor-compressor-backups");
+            let backup_dir = std::env::temp_dir().join("octoshrink-backups");
             let _ = fs::create_dir_all(&backup_dir);
             let backup_path = backup_dir.join(base64_url_name(file_path));
             if !backup_path.exists() {
@@ -370,7 +370,7 @@ pub async fn compress_single(
 
     // Write compressed output to a persistent temp file for display
     if engine_result.success {
-        let dir = std::env::temp_dir().join("octor-compressor-display");
+        let dir = std::env::temp_dir().join("octoshrink-display");
         let _ = fs::create_dir_all(&dir);
         let ts = SystemTime::now()
             .duration_since(UNIX_EPOCH)

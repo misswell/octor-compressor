@@ -1,5 +1,5 @@
 // Integration test for the compression engine
-use octor_compressor_lib::engine;
+use octoshrink_lib::engine;
 use std::fs;
 use std::path::PathBuf;
 

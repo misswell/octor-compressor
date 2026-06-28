@@ -2414,7 +2414,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "octor-compressor"
+name = "octoshrink"
 version = "2.0.0"
 dependencies = [
  "base64 0.22.1",
