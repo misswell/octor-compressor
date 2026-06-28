@@ -57,61 +57,57 @@ jobs:
       - name: Download CLI tools
         shell: pwsh
         run: |
-          # Clear macOS binaries, download Windows tools
+          $ErrorActionPreference = 'Continue'
+          New-Item -ItemType Directory -Force -Path src-tauri\resources\bin | Out-Null
           Remove-Item src-tauri\resources\bin\* -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Force -Path src-tauri\resources\bin
 
-          $tools = @(
-            @{ Name = "pngquant.exe"; Url = "https://github.com/ImageOptim/pngquant/releases/download/v3.0.3/pngquant-3.0.3-windows.zip" },
-            @{ Name = "oxipng.exe"; Url = "https://github.com/shssoichiro/oxipng/releases/download/v9.1.5/oxipng-9.1.5-x86_64-pc-windows-msvc.zip" },
-            @{ Name = "gifsicle.exe"; Url = "https://eternallybored.org/misc/gifsicle/releases/current/windows-x64/giflossy-x64.zip" },
-            @{ Name = "cwebp.exe"; Url = "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.3.2-windows-x64.zip" },
-            @{ Name = "avifenc.exe"; Url = "https://github.com/AOM-AV1/libavif/releases/download/v1.0.4/libavif-win64-v1.0.4.zip" },
-            @{ Name = "cjxl.exe"; Url = "https://github.com/libjxl/libjxl/releases/download/v0.10.2/jxl-x64-windows-0.10.2.zip" }
-          )
-
-          foreach ($tool in $tools) {
+          function Download-Tool($name, $url, $pattern) {
             try {
-              $zipPath = "$($tool.Name).zip"
-              Invoke-WebRequest -Uri $tool.Url -OutFile $zipPath -ErrorAction Stop
-              $extractPath = "extract-$($tool.Name)"
-              Expand-Archive $zipPath -DestinationPath $extractPath -Force
-              $found = Get-ChildItem -Path $extractPath -Filter $tool.Name -Recurse | Select-Object -First 1
+              $zip = "$name.zip"
+              Write-Host "Downloading $name from $url"
+              Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+              $dest = "extract-$name"
+              Expand-Archive $zip -DestinationPath $dest -Force
+              $found = Get-ChildItem -Path $dest -Filter $pattern -Recurse | Select-Object -First 1
               if ($found) {
-                Copy-Item $found.FullName "src-tauri\resources\bin\$($tool.Name)" -Force
-                Write-Host "  OK $($tool.Name)"
+                Copy-Item $found.FullName "src-tauri\resources\bin\$name" -Force
+                Write-Host "  OK $name"
               } else {
-                Write-Host "  SKIP $($tool.Name) - not found in archive"
+                Write-Host "  SKIP $name - binary not found in archive"
               }
-              Remove-Item $extractPath -Recurse -Force -ErrorAction SilentlyContinue
-              Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+              Remove-Item $dest -Recurse -Force -ErrorAction SilentlyContinue
+              Remove-Item $zip -Force -ErrorAction SilentlyContinue
             } catch {
-              Write-Host "  FAIL $($tool.Name) - $($_.Exception.Message)"
+              Write-Host "  SKIP $name - $($_.Exception.Message)"
             }
           }
 
-          # cjpeg (mozjpeg) - no official Windows binary, try scoop
-          try {
-            iex "& {$(irm get.scoop.sh)} -RunAsAdmin" 2>$null
-            scoop install png2mozjpeg 2>$null
-            $cjpeg = Get-Command cjpeg.exe -ErrorAction SilentlyContinue
-            if ($cjpeg) {
-              Copy-Item $cjpeg.Source "src-tauri\resources\bin\cjpeg.exe" -Force
-              Write-Host "  OK cjpeg.exe"
-            }
-          } catch {
-            Write-Host "  SKIP cjpeg.exe"
+          Download-Tool "pngquant.exe" "https://pngquant.org/pngquant-windows.zip" "pngquant.exe"
+          Download-Tool "oxipng.exe" "https://github.com/shssoichiro/oxipng/releases/download/v9.1.5/oxipng-9.1.5-x86_64-pc-windows-msvc.zip" "oxipng.exe"
+          Download-Tool "gifsicle.exe" "https://eternallybored.org/misc/gifsicle/releases/1.95/windows-x64/gifsicle-x64.zip" "gifsicle.exe"
+          Download-Tool "cwebp.exe" "https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.4.0-windows-x64.zip" "cwebp.exe"
+          Download-Tool "avifenc.exe" "https://github.com/AOM-AV1/libavif/releases/download/v1.1.1/libavif-win64-v1.1.1.zip" "avifenc.exe"
+          Download-Tool "cjxl.exe" "https://github.com/libjxl/libjxl/releases/download/v0.10.2/jxl-x64-windows-0.10.2.zip" "cjxl.exe"
+          Download-Tool "cjpeg.exe" "https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.0.2/libjpeg-turbo-3.0.2-vc64.exe" "cjpeg.exe"
+
+          # cjpeg from libjpeg-turbo installer might be an EXE installer, try alternative
+          if (-not (Test-Path "src-tauri\resources\bin\cjpeg.exe")) {
+            Download-Tool "cjpeg.exe" "https://github.com/Mozreble/mozjpeg/releases/download/v4.1.1/mozjpeg-4.1.1-win64.zip" "cjpeg.exe"
           }
 
           Write-Host "`nBundled tools:"
-          Get-ChildItem src-tauri\resources\bin\ | ForEach-Object { Write-Host "  $($_.Name)" }
+          Get-ChildItem src-tauri\resources\bin\ -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "  $($_.Name)" }
 
       - name: Add resources config and build
         shell: pwsh
         run: |
-          # Add resources config for Tauri to bundle tools
+          $ErrorActionPreference = 'Continue'
           $config = Get-Content src-tauri\tauri.conf.json -Raw | ConvertFrom-Json
-          $config.bundle | Add-Member -NotePropertyName "resources" -NoteValue @("resources/bin/*") -Force
+          if ($config.bundle.PSObject.Properties.Name -contains 'resources') {
+            $config.bundle.resources = @("resources/bin/*")
+          } else {
+            $config.bundle | Add-Member -NotePropertyName "resources" -NoteValue @("resources/bin/*")
+          }
           $config | ConvertTo-Json -Depth 10 | Set-Content src-tauri\tauri.conf.json
 
           cargo install tauri-cli --version "^2.0" --locked
@@ -139,34 +135,41 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y \
             libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
             librsvg2-dev \
             patchelf \
             libssl-dev \
             libgtk-3-dev \
-            libayatana-appindicator3-dev
+            libayatana-appindicator3-dev \
+            file
 
       - name: Download CLI tools
         run: |
-          # Clear macOS binaries
+          set +e
           rm -f src-tauri/resources/bin/*
           rm -rf src-tauri/resources/lib/
 
-          # Install via apt and copy to resources/bin
-          sudo apt-get install -y pngquant gifsicle webp libavif-bin libjpeg-turbo-progs 2>/dev/null || true
+          # Install via apt
+          sudo apt-get install -y pngquant gifsicle webp libavif-bin libjpeg-turbo-progs || true
           for tool in pngquant gifsicle cwebp avifenc cjpeg; do
-            cp "$(which $tool 2>/dev/null)" src-tauri/resources/bin/ 2>/dev/null && echo "  OK $tool" || echo "  SKIP $tool"
+            p=$(which $tool 2>/dev/null)
+            if [ -n "$p" ] && [ -f "$p" ]; then
+              cp "$p" src-tauri/resources/bin/ && echo "  OK $tool" || echo "  SKIP $tool"
+            else
+              echo "  SKIP $tool (not found)"
+            fi
           done
 
-          # oxipng - static musl binary
-          wget -q "https://github.com/shssoichiro/oxipng/releases/download/v9.1.5/oxipng-9.1.5-x86_64-unknown-linux-musl.tar.gz" -O /tmp/oxipng.tar.gz 2>/dev/null && \
+          # oxipng
+          wget -q "https://github.com/shssoichiro/oxipng/releases/download/v9.1.5/oxipng-9.1.5-x86_64-unknown-linux-musl.tar.gz" -O /tmp/oxipng.tar.gz && \
             tar xzf /tmp/oxipng.tar.gz -C /tmp && \
             cp /tmp/oxipng-*/oxipng src-tauri/resources/bin/ && echo "  OK oxipng" || echo "  SKIP oxipng"
 
-          # cjxl - try libjxl release
-          wget -q "https://github.com/libjxl/libjxl/releases/download/v0.10.2/jxl-linux-x64-static-v0.10.2.tar.gz" -O /tmp/jxl.tar.gz 2>/dev/null && \
-            tar xzf /tmp/jxl.tar.gz -C /tmp 2>/dev/null && \
-            find /tmp -name cjxl -type f -executable -exec cp {} src-tauri/resources/bin/ \; 2>/dev/null && echo "  OK cjxl" || echo "  SKIP cjxl"
+          # cjxl
+          wget -q "https://github.com/libjxl/libjxl/releases/download/v0.10.2/jxl-linux-x64-static-v0.10.2.tar.gz" -O /tmp/jxl.tar.gz && \
+            mkdir -p /tmp/jxl-extract && \
+            tar xzf /tmp/jxl.tar.gz -C /tmp/jxl-extract 2>/dev/null && \
+            find /tmp/jxl-extract -name cjxl -type f -executable -exec cp {} src-tauri/resources/bin/ \; 2>/dev/null && \
+            echo "  OK cjxl" || echo "  SKIP cjxl"
 
           echo ""
           echo "Bundled tools:"
@@ -174,7 +177,6 @@ jobs:
 
       - name: Add resources config and build
         run: |
-          # Add resources config for Tauri to bundle tools
           python3 -c "
           import json
           with open('src-tauri/tauri.conf.json', 'r') as f:
