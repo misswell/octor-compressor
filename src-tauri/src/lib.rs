@@ -16,6 +16,7 @@ pub fn run() {
             commands::select_files,
             commands::select_folder,
             commands::select_output_dir,
+            commands::expand_image_files,
             commands::compress_files,
             commands::compress_smart,
             commands::compress_single,

@@ -30,6 +30,31 @@
 - ↩️ **恢复原图** — 压缩后不满意可一键恢复原始文件
 - 🔄 **实时切换压缩率** — 对比时随时调整质量参数重新压缩，实时对比效果
 
+## 📦 下载与安装
+
+前往 [GitHub Releases](https://github.com/misswell/octo-shrink/releases) 下载对应平台安装包。
+
+### macOS 提示“已损坏，无法打开”
+
+如果从 GitHub 下载后打开提示：
+
+> “OctoShrink.app”已损坏，无法打开。你应该推出磁盘映像。
+
+这通常不是文件真的损坏，而是 macOS 对未签名/未公证开源应用添加了隔离标记。可以这样处理：
+
+1. 打开 `.dmg`
+2. 将 `OctoShrink.app` 拖到「应用程序」文件夹
+3. 推出/弹出磁盘映像
+4. 打开「终端」，运行：
+
+```bash
+sudo xattr -dr com.apple.quarantine /Applications/OctoShrink.app
+```
+
+5. 再从「应用程序」里打开 OctoShrink
+
+说明：当前 GitHub Release 版本暂未进行 Apple Developer ID 签名与 notarize，所以 macOS 可能会拦截。后续如果完成签名公证，就不需要这一步。
+
 ## 🏗️ 技术架构
 
 基于 **Tauri 2** 构建，后端使用 Rust，前端使用原生 HTML/CSS/JS（无构建步骤）。

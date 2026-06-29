@@ -340,6 +340,11 @@ pub async fn select_output_dir(app: AppHandle) -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
+pub fn expand_image_files(file_paths: Vec<String>) -> Vec<String> {
+    collect_image_files(&file_paths)
+}
+
+#[tauri::command]
 pub async fn compress_files(
     app: AppHandle,
     state: State<'_, AppState>,
