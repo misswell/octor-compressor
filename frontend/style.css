@@ -72,7 +72,7 @@
 }
 
 /* 亮色模式专用变量补充 */
-:root {
+[data-theme="light"] {
   --queue-done-bg: #f0fdf4;
   --queue-failed-bg: #fef2f2;
   --slider-track: #e2e8f0;
@@ -816,6 +816,7 @@ body {
   transition: background 0.2s;
   position: relative;
   overflow: hidden;
+  border: 1px solid transparent;
 }
 
 .file-queue-item.waiting { opacity: 0.8; }
@@ -1809,6 +1810,19 @@ body {
 }
 [data-theme="dark"] .modal-backdrop {
   background: rgba(0,0,0,0.70);
+}
+
+[data-theme="dark"] .file-queue-item.done {
+  border-color: rgba(52,211,153,0.22);
+}
+
+[data-theme="dark"] .file-queue-item.failed {
+  border-color: rgba(248,113,113,0.24);
+}
+
+[data-theme="dark"] .file-queue-item .queue-item-icon,
+[data-theme="dark"] .queue-action-btn:hover {
+  background: rgba(15,23,42,0.58);
 }
 
 /* ─── 错误详情 UI ───────────────────────────────────────────────── */
