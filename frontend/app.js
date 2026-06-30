@@ -1,7 +1,7 @@
 // OctoShrink - Tauri frontend
 // Uses window.__TAURI__ global API (withGlobalTauri: true)
 
-const { invoke } = window.__TAURI__.core;
+const { invoke, convertFileSrc } = window.__TAURI__.core;
 const { listen } = window.__TAURI__.event;
 
 // ─── Path utilities (replace Node's path module) ────────────────
@@ -18,6 +18,37 @@ function dirname(p) {
   const parts = String(p).replace(/\\/g, '/').split('/');
   parts.pop();
   return parts.join('/') || '.';
+}
+
+function imageFileSrc(filePath) {
+  if (typeof convertFileSrc !== 'function') return null;
+  return convertFileSrc(filePath);
+}
+
+function setImageSource(img, src) {
+  return new Promise((resolve, reject) => {
+    img.onload = () => resolve(true);
+    img.onerror = () => reject(new Error('image load failed'));
+    img.src = src;
+  });
+}
+
+async function loadOriginalImage(img, filePath) {
+  img.removeAttribute('src');
+  const directSrc = imageFileSrc(filePath);
+  if (directSrc) {
+    try {
+      await setImageSource(img, directSrc);
+      return true;
+    } catch (_) {
+      img.removeAttribute('src');
+    }
+  }
+
+  const dataUrl = await invoke('read_image_dataurl', { filePath: filePath, preview: false });
+  if (!dataUrl) return false;
+  await setImageSource(img, dataUrl);
+  return true;
 }
 
 // ─── 主题管理（自动/亮色/暗黑）──────────────────────────────────
@@ -674,11 +705,7 @@ async function recompressWithQuality(quality) {
     const newResult = await invoke('compress_single', { filePath: result.file, options: options });
     if (newResult && newResult.success && newResult.outputPath) {
       // Load the new compressed image
-      const compressedDataUrl = await invoke('read_image_dataurl', { filePath: newResult.outputPath });
-      if (compressedDataUrl) {
-        compareCompressedImg.removeAttribute('src');
-        compareCompressedImg.src = compressedDataUrl;
-      }
+      await loadOriginalImage(compareCompressedImg, newResult.outputPath);
       compareCompressedSize.textContent = newResult.compressedSizeFormatted || '?';
       compareSavings.textContent = (newResult.savings >= 0 ? '-' : '+') + Math.abs(newResult.savings).toFixed(1) + '%';
       compareAlgorithm.textContent = newResult.algorithm || '?';
@@ -705,20 +732,15 @@ async function openCompare(result) {
 
   // Determine the original image path (backup for replace mode, else original file)
   const originalPath = result.backupPath || result.file;
-  const originalDataUrl = await invoke('read_image_dataurl', { filePath: originalPath });
-  if (!originalDataUrl) {
+  const loadedOriginal = await loadOriginalImage(compareOriginalImg, originalPath);
+  if (!loadedOriginal) {
     showToast('无法加载原图');
     return;
   }
 
   // Load compressed image from output path
   const compressedPath = result.outputPath || result.file;
-  const compressedDataUrl = await invoke('read_image_dataurl', { filePath: compressedPath });
-
-  compareOriginalImg.src = originalDataUrl;
-  if (compressedDataUrl) {
-    compareCompressedImg.src = compressedDataUrl;
-  }
+  await loadOriginalImage(compareCompressedImg, compressedPath);
 
   // Set container aspect-ratio to match image
   var outer = document.getElementById('compareSliderOuter');

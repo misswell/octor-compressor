@@ -458,16 +458,20 @@ pub fn open_in_finder(file_path: String) -> bool {
 }
 
 #[tauri::command]
-pub fn read_image_dataurl(file_path: String) -> Option<String> {
+pub fn read_image_dataurl(file_path: String, preview: Option<bool>) -> Option<String> {
     let path = PathBuf::from(&file_path);
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("png")
         .to_lowercase();
-    let preview = preview_image_bytes(&path, &ext);
-    let has_preview = preview.is_some();
-    let data = preview.or_else(|| fs::read(&path).ok())?;
+    let preview_data = if preview.unwrap_or(false) {
+        preview_image_bytes(&path, &ext)
+    } else {
+        None
+    };
+    let has_preview = preview_data.is_some();
+    let data = preview_data.or_else(|| fs::read(&path).ok())?;
     let mime = if has_preview {
         if matches!(ext.as_str(), "jpg" | "jpeg") {
             "image/jpeg"
