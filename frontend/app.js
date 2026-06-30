@@ -279,6 +279,14 @@ function updateQueueSummary() {
   } else {
     summary.textContent = files.length + ' 个文件';
   }
+  updateBulkActionButtons();
+}
+
+function updateBulkActionButtons() {
+  var restoreBtn = document.getElementById('restoreAllBtn');
+  if (!restoreBtn) return;
+  var hasRestorable = results.some(function(r) { return r && r.success; });
+  restoreBtn.style.display = hasRestorable ? 'inline-flex' : 'none';
 }
 
 async function renderFileQueue() {
@@ -394,8 +402,9 @@ function clearAllFiles() {
   resultsPanel.style.display = 'none';
   var list = document.getElementById('fileQueueList');
   if (list) list.innerHTML = '';
-  var stats = document.getElementById('queueStats');
+  var queueStats = document.getElementById('queueStats');
   if (queueStats) queueStats.style.display = 'none';
+  updateQueueSummary();
 }
 
 // ─── Compression ────────────────────────────────────────────────
@@ -574,15 +583,32 @@ async function restoreOriginal(filePath, backupPath, outputMode) {
   if (result.success) {
     showToast('已恢复原图: ' + basename(filePath));
     results = results.filter(r => r.file !== filePath);
+    markQueueRowRestored(filePath);
     showResults();
+    updateQueueSummary();
   } else {
     showToast('恢复失败: ' + (result.error || '未知错误'));
   }
 }
 
+function markQueueRowRestored(filePath) {
+  var row = fileRows[filePath];
+  if (!row) return;
+  row.classList.remove('done', 'failed', 'compressing');
+  row.classList.add('restored');
+  var icon = row.querySelector('.queue-item-icon');
+  if (icon) icon.textContent = '↺';
+  var status = row.querySelector('.queue-item-status');
+  if (status) status.textContent = '已恢复';
+  var actions = row.querySelector('.queue-item-actions');
+  if (actions) actions.innerHTML = '';
+}
+
 async function restoreAllOriginals() {
   if (results.length === 0) return;
+  if (!confirm('确定要恢复全部已压缩成功的原图吗？')) return;
   var successCount = 0;
+  var restoredFiles = [];
   for (var i = 0; i < results.length; i++) {
     var r = results[i];
     if (!r.success) continue;
@@ -593,11 +619,14 @@ async function restoreAllOriginals() {
         outputMode: r.outputMode || 'suffix'
       });
       successCount++;
+      restoredFiles.push(r.file);
     } catch(e) { /* ignore */ }
   }
   showToast('已恢复 ' + successCount + ' 个文件到原图');
+  restoredFiles.forEach(markQueueRowRestored);
   results = [];
   showResults();
+  updateQueueSummary();
 }
 
 async function exportAll() {
@@ -620,10 +649,11 @@ function clearResults() {
   var queuePanel = document.getElementById('queuePanel');
   if (queuePanel) queuePanel.style.display = 'none';
   var queueStats = document.getElementById('queueStats');
-  if (queueStats) stats.style.display = 'none';
+  if (queueStats) queueStats.style.display = 'none';
   settingsPanel.style.display = 'none';
   var list = document.getElementById('fileQueueList');
   if (list) list.innerHTML = '';
+  updateQueueSummary();
 }
 
 function formatBytes(bytes) {
