@@ -37,6 +37,7 @@ fn get_lib_dir() -> Option<PathBuf> {
 /// 创建带有正确环境变量的 Command（自动设置 DYLD_FALLBACK_LIBRARY_PATH）
 fn make_command(tool: &Path) -> Command {
     let mut cmd = Command::new(tool);
+    cmd.kill_on_drop(true);
     #[cfg(target_os = "windows")]
     {
         // CREATE_NO_WINDOW: 避免每个 CLI 工具弹出控制台黑框

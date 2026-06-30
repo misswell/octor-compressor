@@ -4,6 +4,7 @@ pub mod engine;
 use commands::AppState;
 use std::collections::HashSet;
 use std::sync::Mutex;
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -11,6 +12,11 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             cancel_queue: Mutex::new(HashSet::new()),
+        })
+        .on_window_event(|window, event| {
+            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                window.app_handle().exit(0);
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::select_files,
@@ -33,7 +39,6 @@ pub fn run() {
         ])
         .setup(|app| {
             // 初始化压缩工具资源目录（开箱即用，无需用户安装 CLI 工具）
-            use tauri::Manager;
             if let Ok(res_dir) = app.path().resource_dir() {
                 engine::set_resource_dir(res_dir);
             }

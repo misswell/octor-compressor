@@ -676,6 +676,7 @@ async function recompressWithQuality(quality) {
       // Load the new compressed image
       const compressedDataUrl = await invoke('read_image_dataurl', { filePath: newResult.outputPath });
       if (compressedDataUrl) {
+        compareCompressedImg.removeAttribute('src');
         compareCompressedImg.src = compressedDataUrl;
       }
       compareCompressedSize.textContent = newResult.compressedSizeFormatted || '?';
@@ -699,6 +700,7 @@ async function recompressWithQuality(quality) {
 }
 
 async function openCompare(result) {
+  releaseCompareImages();
   currentCompareResult = result;
 
   // Determine the original image path (backup for replace mode, else original file)
@@ -809,7 +811,19 @@ function closeCompare() {
   document.getElementById('modalBackdrop').style.display = 'none';
   document.body.style.overflow = '';
   currentCompareResult = null;
+  releaseCompareImages();
   setCompareZoom(1);
+}
+
+function releaseCompareImages() {
+  if (compareOriginalImg) {
+    compareOriginalImg.onload = null;
+    compareOriginalImg.removeAttribute('src');
+  }
+  if (compareCompressedImg) {
+    compareCompressedImg.onload = null;
+    compareCompressedImg.removeAttribute('src');
+  }
 }
 
 var recompressQualitySlider = document.getElementById('recompressQuality');
@@ -912,6 +926,10 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && comparePanel.style.display !== 'none') {
     closeCompare();
   }
+});
+
+window.addEventListener('beforeunload', () => {
+  releaseCompareImages();
 });
 
 function showToast(message) {

@@ -460,24 +460,88 @@ pub fn open_in_finder(file_path: String) -> bool {
 #[tauri::command]
 pub fn read_image_dataurl(file_path: String) -> Option<String> {
     let path = PathBuf::from(&file_path);
-    let data = fs::read(&path).ok()?;
     let ext = path
         .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("png")
         .to_lowercase();
-    let mime = match ext.as_str() {
-        "png" => "image/png",
-        "jpg" | "jpeg" => "image/jpeg",
-        "gif" => "image/gif",
-        "webp" => "image/webp",
-        "bmp" => "image/bmp",
-        "avif" => "image/avif",
-        "jxl" => "image/jxl",
-        _ => "image/png",
+    let preview = preview_image_bytes(&path, &ext);
+    let has_preview = preview.is_some();
+    let data = preview.or_else(|| fs::read(&path).ok())?;
+    let mime = if has_preview {
+        if matches!(ext.as_str(), "jpg" | "jpeg") {
+            "image/jpeg"
+        } else {
+            "image/png"
+        }
+    } else {
+        match ext.as_str() {
+            "png" => "image/png",
+            "jpg" | "jpeg" => "image/jpeg",
+            "gif" => "image/gif",
+            "webp" => "image/webp",
+            "bmp" => "image/bmp",
+            "avif" => "image/avif",
+            "jxl" => "image/jxl",
+            _ => "image/png",
+        }
     };
     let b64 = base64::engine::general_purpose::STANDARD.encode(&data);
     Some(format!("data:{};base64,{}", mime, b64))
+}
+
+fn preview_image_bytes(path: &Path, ext: &str) -> Option<Vec<u8>> {
+    if matches!(ext, "gif" | "avif" | "jxl") {
+        return None;
+    }
+
+    const MAX_PREVIEW_DIMENSION: u32 = 2048;
+    const MAX_RAW_PREVIEW_BYTES: u64 = 8 * 1024 * 1024;
+
+    let original_size = fs::metadata(path).ok()?.len();
+    let img = image::open(path).ok()?;
+    let needs_preview = original_size > MAX_RAW_PREVIEW_BYTES
+        || img.width() > MAX_PREVIEW_DIMENSION
+        || img.height() > MAX_PREVIEW_DIMENSION;
+
+    if !needs_preview {
+        return None;
+    }
+
+    let preview = img.thumbnail(MAX_PREVIEW_DIMENSION, MAX_PREVIEW_DIMENSION);
+    let mut buf = Vec::new();
+
+    if matches!(ext, "jpg" | "jpeg") {
+        let rgb = preview.to_rgb8();
+        let encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 84);
+        use image::ImageEncoder;
+        encoder
+            .write_image(
+                &rgb,
+                preview.width(),
+                preview.height(),
+                image::ExtendedColorType::Rgb8,
+            )
+            .ok()?;
+    } else {
+        let rgba = preview.to_rgba8();
+        let encoder = image::codecs::png::PngEncoder::new_with_quality(
+            &mut buf,
+            image::codecs::png::CompressionType::Fast,
+            image::codecs::png::FilterType::Adaptive,
+        );
+        use image::ImageEncoder;
+        encoder
+            .write_image(
+                &rgba,
+                preview.width(),
+                preview.height(),
+                image::ExtendedColorType::Rgba8,
+            )
+            .ok()?;
+    }
+
+    Some(buf)
 }
 
 #[tauri::command]
