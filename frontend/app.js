@@ -316,6 +316,7 @@ function createQueueRow(filePath) {
     '<span class="queue-item-name">' + name + '</span>' +
     '<span class="queue-item-size"></span>' +
     '<span class="queue-item-status">等待中</span>' +
+    '<span class="queue-item-actions"></span>' +
     '<button class="queue-item-remove" title="移除">×</button>' +
     '<div class="progress-file-bar"></div>';
   var rmBtn = row.querySelector('.queue-item-remove');
@@ -343,6 +344,36 @@ function createQueueRow(filePath) {
     }
   });
   return row;
+}
+
+function renderQueueResultActions(row, result) {
+  var actions = row.querySelector('.queue-item-actions');
+  if (!actions) return;
+  actions.innerHTML = '';
+  if (!result || !result.success) return;
+
+  var actionDefs = [
+    { action: 'save', title: '另存为', icon: '<svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor"><path d="M11 0H3a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V1a1 1 0 00-1-1zm-1 12H4V2h6v10z"/></svg>' },
+    { action: 'compare', title: '对比查看', icon: '<svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor"><path d="M2 2h4v4H2V2zm0 6h4v4H2V8zm6-6h4v4H8V2zm0 6h4v4H8V8z"/></svg>' },
+    { action: 'restore', title: '恢复原图', icon: '<svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor"><path d="M7 1a6 6 0 100 12A6 6 0 007 1zm0 10V7H4l3-4 3 4H7v4z"/></svg>' },
+    { action: 'finder', title: '在访达中显示', icon: '<svg width="13" height="13" viewBox="0 0 14 14" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 012.5 1h3.172a1.5 1.5 0 011.06.44l.94.94H11.5A1.5 1.5 0 0113 3.88V11.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 011 11.5V2.5z"/></svg>' },
+  ];
+
+  actionDefs.forEach(function(def) {
+    var btn = document.createElement('button');
+    btn.className = 'queue-action-btn';
+    btn.type = 'button';
+    btn.title = def.title;
+    btn.innerHTML = def.icon;
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      if (def.action === 'save') saveResult(result.file);
+      else if (def.action === 'compare') openCompareByFile(result.file);
+      else if (def.action === 'restore') restoreOriginal(result.file, result.backupPath || '', result.outputMode || 'suffix');
+      else if (def.action === 'finder') openInFinder(result.file);
+    });
+    actions.appendChild(btn);
+  });
 }
 
 function clearAllFiles() {
@@ -440,6 +471,8 @@ async function startCompression() {
       row.classList.remove('compressing');
       row.classList.add(result.success ? 'done' : 'failed');
       row.querySelector('.queue-item-icon').innerHTML = result.success ? '✓' : '✗';
+      var rmBtnDone = row.querySelector('.queue-item-remove');
+      if (rmBtnDone) rmBtnDone.style.display = 'none';
       var sizeEl = row.querySelector('.queue-item-size');
       if (result.success && sizeEl) {
         sizeEl.textContent = formatBytes(result.originalSize) + ' → ' + formatBytes(result.compressedSize);
@@ -459,6 +492,7 @@ async function startCompression() {
         statusEl.appendChild(errIcon);
       }
       results.push(result);
+      renderQueueResultActions(row, result);
       updateStats();
       totalDone++;
       updateQueueSummary();
@@ -512,96 +546,8 @@ function updateStats() {
 }
 
 function showResults() {
-  resultsPanel.style.display = 'block';
-
-  let totalOriginal = 0;
-  let totalCompressed = 0;
-  let successCount = 0;
-
-  for (const r of results) {
-    if (r.success) {
-      totalOriginal += r.originalSize || 0;
-      totalCompressed += r.compressedSize || 0;
-      successCount++;
-    }
-  }
-
-  resultCount.textContent = successCount;
-  resultTotalSavings.textContent = formatBytes(totalOriginal - totalCompressed);
-
+  resultsPanel.style.display = 'none';
   resultsList.innerHTML = '';
-
-  for (const r of results) {
-    const item = document.createElement('div');
-    item.className = 'result-item ' + (r.success ? 'success' : 'fail');
-
-    const ext = (r.type || extname(r.file).replace('.', '').toLowerCase() || '?');
-    const filename = basename(r.file);
-
-    const savingsClass = r.savings < 0 ? 'negative' : '';
-    const savingsText = r.savings >= 0 ? '-' + r.savings.toFixed(1) + '%' : '+' + Math.abs(r.savings).toFixed(1) + '%';
-    const outExt = r.type || ext;
-
-    item.innerHTML = `
-      <div class="result-icon ${outExt}">${outExt}</div>
-      <div class="result-info">
-        <div class="result-filename" title="${filename}">${filename}</div>
-        <div class="result-sizes">
-          ${r.originalSizeFormatted || '?'} → ${r.compressedSizeFormatted || '?'}
-          ${r.algorithm ? '<span style="color:var(--text-tertiary);font-size:10px"> · ' + r.algorithm + '</span>' : ''}
-        </div>
-      </div>
-      <div class="result-savings ${savingsClass}">${savingsText}</div>
-      <div class="result-actions">
-        <button class="btn-icon" data-action="save" title="另存为">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M11 0H3a1 1 0 00-1 1v12a1 1 0 001 1h8a1 1 0 001-1V1a1 1 0 00-1-1zm-1 12H4V2h6v10z"/></svg>
-        </button>
-        <button class="btn-icon" data-action="compare" title="对比查看">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M2 2h4v4H2V2zm0 6h4v4H2V8zm6-6h4v4H8V2zm0 6h4v4H8V8z"/></svg>
-        </button>
-        <button class="btn-icon" data-action="restore" title="恢复原图">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M7 1a6 6 0 100 12A6 6 0 007 1zm0 10V7H4l3-4 3 4H7v4z"/></svg>
-        </button>
-        <button class="btn-icon" data-action="finder" title="在访达中显示">
-          <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor"><path d="M1 2.5A1.5 1.5 0 012.5 1h3.172a1.5 1.5 0 011.06.44l.94.94H11.5A1.5 1.5 0 0113 3.88V11.5a1.5 1.5 0 01-1.5 1.5h-9A1.5 1.5 0 011 11.5V2.5z"/></svg>
-        </button>
-      </div>
-    `;
-
-    // Attach event listeners (avoids path escaping issues on Windows backslashes)
-    (function(resultData) {
-      var btns = item.querySelectorAll('.btn-icon[data-action]');
-      btns.forEach(function(btn) {
-        btn.addEventListener('click', function(e) {
-          e.stopPropagation();
-          var action = btn.getAttribute('data-action');
-          if (action === 'save') saveResult(resultData.file);
-          else if (action === 'compare') openCompareByFile(resultData.file);
-          else if (action === 'restore') restoreOriginal(resultData.file, resultData.backupPath || '', resultData.outputMode || 'suffix');
-          else if (action === 'finder') openInFinder(resultData.file);
-        });
-      });
-    })(r);
-
-    resultsList.appendChild(item);
-
-    // 如果有错误信息，添加警告图标
-    if (r.error) {
-      var savingsEl = item.querySelector('.result-savings');
-      if (savingsEl) {
-        var errIcon = document.createElement('span');
-        errIcon.className = 'error-info-btn';
-        errIcon.title = '点击查看详情';
-        errIcon.innerHTML = '<svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M6 1L1 11h10L6 1z" fill="#f59e0b" stroke="#f59e0b" stroke-width="0.5"/><circle cx="6" cy="8" r="0.5" fill="white"/><path d="M6 4.5v2.5" stroke="white" stroke-width="0.8" stroke-linecap="round"/></svg>';
-        (function(err, file) {
-          errIcon.onclick = function(e) { e.stopPropagation(); showErrorDetail(file, err); };
-        })(r.error, r.file);
-        savingsEl.appendChild(errIcon);
-      }
-    }
-  }
-
-  resultsPanel.scrollIntoView({ behavior: 'smooth' });
 }
 
 async function saveResult(filePath) {
@@ -771,6 +717,7 @@ async function openCompare(result) {
 // ── Compare slider: clip-path + handle position ──────────────────
 function updateCompareSlider(value) {
   var sliderBar = document.getElementById('compareRange');
+  value = Math.max(0, Math.min(100, parseFloat(value) || 0));
   if (sliderBar) sliderBar.value = Math.round(value);
 
   var outer = document.getElementById('compareSliderOuter');
@@ -786,6 +733,7 @@ function updateCompareSlider(value) {
 
   compareOriginalImg.style.clipPath = 'inset(0 ' + clipRight + '% 0 0)';
   compareHandle.style.left = value + '%';
+  compareHandle.style.display = 'block';
 }
 
 function setCompareZoom(level) {
@@ -825,6 +773,10 @@ function stepZoom(delta) {
 
 function toggleFullscreen() {
   comparePanel.classList.toggle('fullscreen');
+  requestAnimationFrame(function() {
+    var sliderBar = document.getElementById('compareRange');
+    updateCompareSlider(sliderBar ? sliderBar.value : 50);
+  });
 }
 
 function closeCompare() {
